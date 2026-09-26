@@ -19,7 +19,12 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.http import StaticPathConfig
+
+try:
+    # Added alongside async_register_static_paths (HA 2024.7+).
+    from homeassistant.components.http import StaticPathConfig
+except ImportError:
+    StaticPathConfig = None
 
 from .const import (
     ATTR_BIN_ID,
@@ -80,12 +85,12 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     card_path = hass.config.path(
         "custom_components", DOMAIN, "www", "storage-bins-card.js"
     )
-    try:
+    if StaticPathConfig is not None and hasattr(hass.http, "async_register_static_paths"):
         await hass.http.async_register_static_paths(
             [StaticPathConfig(CARD_URL, card_path, cache_headers=False)]
         )
-    except AttributeError:
-        # Older HA cores (pre-2024.7) don't have async_register_static_paths.
+    else:
+        # Older HA cores (pre-2024.7): synchronous, deprecated, but works.
         hass.http.register_static_path(CARD_URL, card_path, cache_headers=False)
 
     add_extra_js_url(hass, CARD_URL)
