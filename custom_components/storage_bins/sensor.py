@@ -1,8 +1,8 @@
-"""A single 'index' sensor listing every bin's name + contents.
+"""A single 'index' sensor listing every bin's name + description.
 
 Handy for a search/autocomplete card, or a template like:
   {{ state_attr('sensor.storage_bins_index','bins')
-       | selectattr('contents','search','flashlight')
+       | selectattr('description','search','flashlight')
        | list }}
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_BINS, CONF_CONTENTS, CONF_NAME, DOMAIN
+from .const import CONF_BINS, CONF_DESCRIPTION, CONF_NAME, DOMAIN
 
 
 async def async_setup_entry(
@@ -44,7 +44,7 @@ class StorageBinsIndexSensor(SensorEntity):
                 {
                     "id": b["id"],
                     "name": b.get(CONF_NAME),
-                    "contents": b.get(CONF_CONTENTS, ""),
+                    "description": b.get(CONF_DESCRIPTION, ""),
                 }
                 for b in bins
             ]

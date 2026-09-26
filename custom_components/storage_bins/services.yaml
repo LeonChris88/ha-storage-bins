@@ -1,7 +1,7 @@
 update_bin:
   name: Update bin
   description: >-
-    Update a bin's name, image, or contents label. Useful for automations,
+    Update a bin's name, image, or description. Useful for automations,
     e.g. a voice command "add flashlight to bin 3".
   fields:
     bin_id:
@@ -17,12 +17,12 @@ update_bin:
         text:
     image:
       name: Image path
-      description: Path relative to /config/www, e.g. storage/bin1.jpg
+      description: Path relative to /config/www, e.g. storage_bins/a1b2c3d4.jpg
       required: false
       selector:
         text:
-    contents:
-      name: Contents
+    description:
+      name: Description
       required: false
       selector:
         text:
@@ -30,7 +30,7 @@ update_bin:
 
 search:
   name: Search bins
-  description: Search all bins' name + contents text. Returns matching bins.
+  description: Search all bins' name + description text. Returns matching bins.
   fields:
     query:
       name: Query

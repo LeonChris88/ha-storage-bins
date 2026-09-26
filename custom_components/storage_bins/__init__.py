@@ -1,17 +1,20 @@
 """The Storage Bins integration.
 
-Manages a set of labeled storage bins (name, photo, contents) entirely
-through the UI, so adding a new bin no longer requires hand-editing
-Lovelace YAML. Each bin becomes an `image` entity; a companion sensor
-exposes all bin contents for search/automation use.
+Manages a set of labeled storage bins (name, photo, description)
+entirely through the UI, so adding a new bin no longer requires
+hand-editing Lovelace YAML. Each bin becomes an `image` entity; a
+companion sensor exposes all bin descriptions for search/automation use.
 """
 from __future__ import annotations
 
 import logging
+import shutil
 import uuid
+from pathlib import Path
 
 import voluptuous as vol
 
+from homeassistant.components.file_upload import process_uploaded_file
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
@@ -22,10 +25,11 @@ from .const import (
     ATTR_BIN_ID,
     ATTR_QUERY,
     CONF_BINS,
-    CONF_CONTENTS,
+    CONF_DESCRIPTION,
     CONF_IMAGE,
     CONF_NAME,
     DOMAIN,
+    IMAGE_SUBDIR,
     PLATFORMS,
     SERVICE_SEARCH,
     SERVICE_UPDATE_BIN,
@@ -40,7 +44,7 @@ UPDATE_BIN_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_BIN_ID): cv.string,
         vol.Optional(CONF_NAME): cv.string,
-        vol.Optional(CONF_CONTENTS): cv.string,
+        vol.Optional(CONF_DESCRIPTION): cv.string,
         vol.Optional(CONF_IMAGE): cv.string,
     }
 )
@@ -104,6 +108,48 @@ def _get_bins(entry: ConfigEntry) -> list[dict]:
     return list(entry.options.get(CONF_BINS, entry.data.get(CONF_BINS, [])))
 
 
+# ---------------------------------------------------------------------------
+# Image storage helpers - used by the config/options flow when a photo is
+# uploaded through the FileSelector, and when a bin's image is replaced or
+# the bin is deleted (so we don't leave orphaned files under /config/www).
+# ---------------------------------------------------------------------------
+
+def _storage_dir(hass: HomeAssistant) -> Path:
+    path = Path(hass.config.path("www", IMAGE_SUBDIR))
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _save_uploaded_image_sync(hass: HomeAssistant, file_id: str, bin_id: str) -> str:
+    """Copy an uploaded file into permanent storage. Returns the relative path."""
+    with process_uploaded_file(hass, file_id) as temp_path:
+        suffix = Path(temp_path).suffix or ".jpg"
+        dest = _storage_dir(hass) / f"{bin_id}{suffix}"
+        shutil.copy(temp_path, dest)
+    return f"{IMAGE_SUBDIR}/{dest.name}"
+
+
+async def async_save_uploaded_image(hass: HomeAssistant, file_id: str, bin_id: str) -> str:
+    """Persist an uploaded image for a bin, replacing any prior file for that bin."""
+    await async_delete_bin_images(hass, bin_id)
+    return await hass.async_add_executor_job(
+        _save_uploaded_image_sync, hass, file_id, bin_id
+    )
+
+
+def _delete_bin_images_sync(hass: HomeAssistant, bin_id: str) -> None:
+    for existing in _storage_dir(hass).glob(f"{bin_id}.*"):
+        try:
+            existing.unlink()
+        except OSError:
+            _LOGGER.debug("Could not remove old image %s", existing)
+
+
+async def async_delete_bin_images(hass: HomeAssistant, bin_id: str) -> None:
+    """Remove any stored image file(s) for a bin (called on replace/delete)."""
+    await hass.async_add_executor_job(_delete_bin_images_sync, hass, bin_id)
+
+
 def _async_register_services(hass: HomeAssistant) -> None:
     """Register domain services once, regardless of how many entries exist."""
     if hass.services.has_service(DOMAIN, SERVICE_UPDATE_BIN):
@@ -117,8 +163,8 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 if b["id"] == bin_id:
                     if CONF_NAME in call.data:
                         b[CONF_NAME] = call.data[CONF_NAME]
-                    if CONF_CONTENTS in call.data:
-                        b[CONF_CONTENTS] = call.data[CONF_CONTENTS]
+                    if CONF_DESCRIPTION in call.data:
+                        b[CONF_DESCRIPTION] = call.data[CONF_DESCRIPTION]
                     if CONF_IMAGE in call.data:
                         b[CONF_IMAGE] = call.data[CONF_IMAGE]
                     hass.config_entries.async_update_entry(
@@ -132,13 +178,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
         matches = []
         for entry in hass.config_entries.async_entries(DOMAIN):
             for b in _get_bins(entry):
-                haystack = f"{b.get(CONF_NAME, '')} {b.get(CONF_CONTENTS, '')}".lower()
+                haystack = f"{b.get(CONF_NAME, '')} {b.get(CONF_DESCRIPTION, '')}".lower()
                 if query in haystack:
                     matches.append(
                         {
                             "id": b["id"],
                             "name": b.get(CONF_NAME),
-                            "contents": b.get(CONF_CONTENTS),
+                            "description": b.get(CONF_DESCRIPTION),
                         }
                     )
         return {"matches": matches}

@@ -1,20 +1,27 @@
 # Storage Bins for Home Assistant
 
-Manage labeled storage bins (photo + contents) entirely from the UI —
+Manage labeled storage bins (photo + description) entirely from the UI —
 no more hand-editing Lovelace YAML every time you add or repack a bin.
 
-Replaces a manual pattern of one `navbar-card` route + one
-`bubble-card` pop-up + one `mushroom-template-card` per bin with:
+This is scoped to the bins themselves only — it doesn't touch your
+navbar-card dashboard routing at all; that stays exactly as you have it.
+
+Replaces a manual pattern of one `bubble-card` pop-up + one
+`mushroom-template-card` per bin with:
 
 - A config flow: **Settings → Devices & Services → Add Integration →
-  Storage Bins**, then use its **Configure** button to add/edit/remove
-  bins (name, photo path, contents description).
-- One `image.*` entity per bin (photo comes from `/config/www/<path>`,
-  same place `/local/...` images already live).
+  Storage Bins**, then use its **Configure** button:
+  - **Add Bin** — Name, Description, Image (upload a photo straight
+    from your browser/phone; no file paths to type).
+  - **Modify Bin** — pick a bin, then Name/Description, Replace Image,
+    or Delete Bin.
+- One `image.*` entity per bin. Uploaded photos are stored under
+  `/config/www/storage_bins/<bin id>.<ext>` automatically — replacing
+  an image or deleting a bin cleans up the old file too.
 - `sensor.storage_bins_index` — one sensor with every bin's name +
-  contents in its attributes, for search/automations.
+  description in its attributes, for search/automations.
 - Two services:
-  - `storage_bins.update_bin` — update a bin's name/image/contents
+  - `storage_bins.update_bin` — update a bin's name/image/description
     programmatically (e.g. from a voice assistant intent).
   - `storage_bins.search` — returns matching bins for a text query
     (response data, usable in scripts/automations).
@@ -34,10 +41,8 @@ Replaces a manual pattern of one `navbar-card` route + one
 4. Find "Storage Bins" in HACS → Integrations → **+ Explore & Download
    Repositories**, install it, then restart Home Assistant.
 5. **Settings → Devices & Services → Add Integration → Storage Bins.**
-6. Click **Configure** on the new entry and add your bins. For an
-   existing bin, e.g. `bin3.jpg`, use image path `storage/bin3.jpg`
-   (relative to `/config/www`, matching whatever you'd write after
-   `/local/` today).
+6. Click **Configure** on the new entry → **Add Bin**, give it a name,
+   an optional description, and upload a photo for it.
 7. Add a card to your dashboard:
    ```yaml
    type: custom:storage-bins-card
@@ -74,19 +79,23 @@ Bump `version` in `manifest.json` and re-tag whenever you make changes.
 ## Migrating your existing 15 bins
 
 You don't need to touch your current `bins.yaml` view right away — the
-integration and the old dashboard can run side by side. Once you've
-added all 15 bins through Configure (reusing the same image files),
-swap the old `sections`/`bubble-card` view for the single
-`custom:storage-bins-card` block above, and delete the old per-bin
-YAML and navbar `#binN` routes.
+integration and the old dashboard can run side by side. Add each bin
+through **Configure → Add Bin**, re-uploading (or re-pointing to) the
+same photo you already have. Once all 15 exist, swap the old
+`sections`/`bubble-card` view for the single `custom:storage-bins-card`
+block above and delete the old per-bin YAML. Your navbar routing is
+untouched either way — nothing here manages that.
 
 ## Notes / things to sanity-check before relying on this
 
-- I wrote this against current core APIs (`ImageEntity`, options-flow
-  menus, service response data) but haven't run it against a live HA
-  instance — test in a dev/test instance (or at least
-  `ha core check_config` after copying in) before replacing your real
-  dashboard, especially given your history with the recorder DB.
+- I wrote this against current core APIs (`ImageEntity`, `FileSelector`
+  + `file_upload.process_uploaded_file`, options-flow menus with
+  `description_placeholders`, service response data) but haven't run
+  it against a live HA instance — test in a dev/test instance (or at
+  least `ha core check_config` after installing) before replacing your
+  real dashboard, especially given your history with the recorder DB.
+- The `file_upload` dependency in `manifest.json` means HA sets that
+  integration up automatically; no action needed on your end.
 - The options flow keeps the whole bin list in one config entry. Fine
   for 15–30 bins; if you ever want per-bin devices/areas, that'd need
   restructuring to subentries (HA 2024.11+) instead.

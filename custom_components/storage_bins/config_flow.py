@@ -1,7 +1,12 @@
 """Config and options flow for Storage Bins.
 
 The integration itself is a singleton ("Storage Bins"); individual bins
-live inside its options and are fully managed here — add, edit, remove —
+live inside its options and are fully managed here:
+
+  Add Bin     -> name, description, image upload
+  Modify Bin  -> pick a bin, then: edit name/description, replace image,
+                 or delete the bin
+
 so nothing needs to be hand-written in Lovelace YAML again.
 """
 from __future__ import annotations
@@ -13,23 +18,30 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    FileSelector,
+    FileSelectorConfig,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
 )
 
-from . import new_bin_id
+from . import async_delete_bin_images, async_save_uploaded_image, new_bin_id
 from .const import (
     ACTION_ADD,
     ACTION_DONE,
-    ACTION_EDIT,
-    ACTION_REMOVE,
+    ACTION_MODIFY,
+    BIN_ACTION_BACK,
+    BIN_ACTION_DELETE,
+    BIN_ACTION_EDIT_DETAILS,
+    BIN_ACTION_REPLACE_IMAGE,
     CONF_BINS,
-    CONF_CONTENTS,
+    CONF_DESCRIPTION,
     CONF_IMAGE,
     CONF_NAME,
     DOMAIN,
 )
+
+IMAGE_SELECTOR = FileSelector(FileSelectorConfig(accept="image/*"))
 
 
 class StorageBinsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -52,28 +64,34 @@ class StorageBinsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return StorageBinsOptionsFlow(config_entry)
 
 
-def _bin_form_schema(defaults: dict | None = None) -> vol.Schema:
-    defaults = defaults or {}
+def _add_bin_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_NAME): str,
+            vol.Optional(CONF_DESCRIPTION, default=""): str,
+            vol.Required(CONF_IMAGE): IMAGE_SELECTOR,
+        }
+    )
+
+
+def _details_schema(defaults: dict) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, "")): str,
-            vol.Required(
-                CONF_IMAGE, default=defaults.get(CONF_IMAGE, "storage/")
-            ): str,
             vol.Optional(
-                CONF_CONTENTS, default=defaults.get(CONF_CONTENTS, "")
+                CONF_DESCRIPTION, default=defaults.get(CONF_DESCRIPTION, "")
             ): str,
         }
     )
 
 
 class StorageBinsOptionsFlow(config_entries.OptionsFlow):
-    """Add / edit / remove bins without touching YAML."""
+    """Add / modify bins without touching YAML."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._entry = config_entry
         self._bins: list[dict] = list(config_entry.options.get(CONF_BINS, []))
-        self._editing_id: str | None = None
+        self._selected_id: str | None = None
 
     @callback
     def _bin_choices(self) -> list[SelectOptionDict]:
@@ -82,68 +100,119 @@ class StorageBinsOptionsFlow(config_entries.OptionsFlow):
             for b in self._bins
         ]
 
+    def _selected_bin(self) -> dict:
+        return next(b for b in self._bins if b["id"] == self._selected_id)
+
+    # -- top menu -----------------------------------------------------
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        self._selected_id = None
         menu_options = [ACTION_ADD]
         if self._bins:
-            menu_options += [ACTION_EDIT, ACTION_REMOVE]
+            menu_options.append(ACTION_MODIFY)
         menu_options.append(ACTION_DONE)
-
         return self.async_show_menu(step_id="init", menu_options=menu_options)
+
+    # -- Add Bin --------------------------------------------------------
 
     async def async_step_add_bin(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
         if user_input is not None:
-            self._bins.append(
-                {
-                    "id": new_bin_id(),
-                    CONF_NAME: user_input[CONF_NAME],
-                    CONF_IMAGE: user_input[CONF_IMAGE],
-                    CONF_CONTENTS: user_input.get(CONF_CONTENTS, ""),
-                }
-            )
-            return await self.async_step_init()
+            bin_id = new_bin_id()
+            try:
+                image_path = await async_save_uploaded_image(
+                    self.hass, user_input[CONF_IMAGE], bin_id
+                )
+            except Exception:  # noqa: BLE001 - surface as a form error, not a crash
+                errors["base"] = "image_upload_failed"
+            else:
+                self._bins.append(
+                    {
+                        "id": bin_id,
+                        CONF_NAME: user_input[CONF_NAME],
+                        CONF_DESCRIPTION: user_input.get(CONF_DESCRIPTION, ""),
+                        CONF_IMAGE: image_path,
+                    }
+                )
+                return await self.async_step_init()
 
         return self.async_show_form(
-            step_id="add_bin", data_schema=_bin_form_schema(), errors=errors
+            step_id="add_bin", data_schema=_add_bin_schema(), errors=errors
         )
 
-    async def async_step_edit_bin(self, user_input: dict[str, Any] | None = None):
-        if user_input is not None and "bin_id" in user_input and self._editing_id is None:
-            self._editing_id = user_input["bin_id"]
-            return await self.async_step_edit_bin()
+    # -- Modify Bin: pick a bin, then a sub-menu -------------------------
 
-        if self._editing_id is None:
-            schema = vol.Schema(
-                {vol.Required("bin_id"): SelectSelector(
-                    SelectSelectorConfig(options=self._bin_choices())
-                )}
-            )
-            return self.async_show_form(step_id="edit_bin", data_schema=schema)
-
-        current = next(b for b in self._bins if b["id"] == self._editing_id)
-
-        if user_input is not None and CONF_NAME in user_input:
-            current[CONF_NAME] = user_input[CONF_NAME]
-            current[CONF_IMAGE] = user_input[CONF_IMAGE]
-            current[CONF_CONTENTS] = user_input.get(CONF_CONTENTS, "")
-            self._editing_id = None
-            return await self.async_step_init()
-
-        return self.async_show_form(
-            step_id="edit_bin", data_schema=_bin_form_schema(current)
-        )
-
-    async def async_step_remove_bin(self, user_input: dict[str, Any] | None = None):
+    async def async_step_modify_bin(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
-            self._bins = [b for b in self._bins if b["id"] != user_input["bin_id"]]
-            return await self.async_step_init()
+            self._selected_id = user_input["bin_id"]
+            return await self.async_step_bin_menu()
 
         schema = vol.Schema(
-            {vol.Required("bin_id"): SelectSelector(
-                SelectSelectorConfig(options=self._bin_choices())
-            )}
+            {"bin_id": SelectSelector(SelectSelectorConfig(options=self._bin_choices()))}
         )
-        return self.async_show_form(step_id="remove_bin", data_schema=schema)
+        return self.async_show_form(step_id="modify_bin", data_schema=schema)
+
+    async def async_step_bin_menu(self, user_input: dict[str, Any] | None = None):
+        current = self._selected_bin()
+        return self.async_show_menu(
+            step_id="bin_menu",
+            menu_options=[
+                BIN_ACTION_EDIT_DETAILS,
+                BIN_ACTION_REPLACE_IMAGE,
+                BIN_ACTION_DELETE,
+                BIN_ACTION_BACK,
+            ],
+            description_placeholders={"bin_name": current.get(CONF_NAME, current["id"])},
+        )
+
+    async def async_step_edit_details(self, user_input: dict[str, Any] | None = None):
+        current = self._selected_bin()
+        if user_input is not None:
+            current[CONF_NAME] = user_input[CONF_NAME]
+            current[CONF_DESCRIPTION] = user_input.get(CONF_DESCRIPTION, "")
+            return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="edit_details", data_schema=_details_schema(current)
+        )
+
+    async def async_step_replace_image(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
+        current = self._selected_bin()
+        if user_input is not None:
+            try:
+                current[CONF_IMAGE] = await async_save_uploaded_image(
+                    self.hass, user_input[CONF_IMAGE], current["id"]
+                )
+            except Exception:  # noqa: BLE001
+                errors["base"] = "image_upload_failed"
+            else:
+                return await self.async_step_init()
+
+        schema = vol.Schema({vol.Required(CONF_IMAGE): IMAGE_SELECTOR})
+        return self.async_show_form(
+            step_id="replace_image", data_schema=schema, errors=errors
+        )
+
+    async def async_step_delete_bin(self, user_input: dict[str, Any] | None = None):
+        current = self._selected_bin()
+        if user_input is not None:
+            if user_input.get("confirm"):
+                await async_delete_bin_images(self.hass, current["id"])
+                self._bins = [b for b in self._bins if b["id"] != current["id"]]
+            return await self.async_step_init()
+
+        schema = vol.Schema({vol.Required("confirm", default=False): bool})
+        return self.async_show_form(
+            step_id="delete_bin",
+            data_schema=schema,
+            description_placeholders={"bin_name": current.get(CONF_NAME, current["id"])},
+        )
+
+    async def async_step_back(self, user_input: dict[str, Any] | None = None):
+        return await self.async_step_modify_bin()
+
+    # -- Done -------------------------------------------------------------
 
     async def async_step_done(self, user_input: dict[str, Any] | None = None):
         return self.async_create_entry(title="", data={CONF_BINS: self._bins})

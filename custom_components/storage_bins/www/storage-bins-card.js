@@ -2,7 +2,7 @@
 // A Lovelace card that replaces hand-written per-bin YAML: it finds every
 // image.* entity created by the Storage Bins integration, lays them out
 // as a numbered grid, and opens a popup with the photo + an editable
-// contents field (saved via storage_bins.update_bin) on tap.
+// description field (saved via storage_bins.update_bin) on tap.
 //
 // Install: copy to /config/www/storage-bins-card.js, add as a Lovelace
 // resource (Settings > Dashboards > Resources > + Add Resource, URL
@@ -49,7 +49,7 @@ class StorageBinsCard extends HTMLElement {
     title.style.cssText = "font-size:1.1em;font-weight:500;margin-bottom:8px;";
 
     const textarea = document.createElement("textarea");
-    textarea.value = entityState.attributes.contents || "";
+    textarea.value = entityState.attributes.description || "";
     textarea.rows = 3;
     textarea.style.cssText =
       "width:100%;box-sizing:border-box;border-radius:6px;padding:8px;font-family:inherit;margin-bottom:12px;background:var(--secondary-background-color,#2c2c2c);color:inherit;border:1px solid var(--divider-color,#444);";
@@ -64,7 +64,7 @@ class StorageBinsCard extends HTMLElement {
     saveBtn.onclick = () => {
       hass.callService("storage_bins", "update_bin", {
         bin_id,
-        contents: textarea.value,
+        description: textarea.value,
       });
       document.body.removeChild(overlay);
     };

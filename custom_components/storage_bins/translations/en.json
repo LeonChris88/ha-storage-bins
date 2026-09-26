@@ -13,37 +13,61 @@
   "options": {
     "step": {
       "init": {
-        "title": "Manage storage bins",
+        "title": "Storage Bins",
         "menu_options": {
-          "add_bin": "Add a bin",
-          "edit_bin": "Edit a bin",
-          "remove_bin": "Remove a bin",
+          "add_bin": "Add Bin",
+          "modify_bin": "Modify Bin",
           "done": "Done"
         }
       },
       "add_bin": {
-        "title": "Add a bin",
+        "title": "Add Bin",
         "data": {
           "name": "Name",
-          "image": "Image path (relative to /config/www)",
-          "contents": "Contents"
+          "description": "Description",
+          "image": "Image"
         }
       },
-      "edit_bin": {
-        "title": "Edit a bin",
-        "data": {
-          "bin_id": "Bin",
-          "name": "Name",
-          "image": "Image path (relative to /config/www)",
-          "contents": "Contents"
-        }
-      },
-      "remove_bin": {
-        "title": "Remove a bin",
+      "modify_bin": {
+        "title": "Modify Bin",
+        "description": "Choose which bin to modify.",
         "data": {
           "bin_id": "Bin"
         }
+      },
+      "bin_menu": {
+        "title": "Modify Bin",
+        "description": "Editing: {bin_name}",
+        "menu_options": {
+          "edit_details": "Name / Description",
+          "replace_image": "Replace Image",
+          "delete_bin": "Delete Bin",
+          "back": "Back to bin list"
+        }
+      },
+      "edit_details": {
+        "title": "Name / Description",
+        "data": {
+          "name": "Name",
+          "description": "Description"
+        }
+      },
+      "replace_image": {
+        "title": "Replace Image",
+        "data": {
+          "image": "New image"
+        }
+      },
+      "delete_bin": {
+        "title": "Delete Bin",
+        "description": "Delete \"{bin_name}\"? This also removes its stored photo. This can't be undone.",
+        "data": {
+          "confirm": "Yes, delete this bin"
+        }
       }
+    },
+    "error": {
+      "image_upload_failed": "Could not save that image. Please try again."
     }
   }
 }

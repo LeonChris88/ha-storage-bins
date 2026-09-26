@@ -1,9 +1,9 @@
 """Image platform for Storage Bins.
 
 Each configured bin becomes an `image.*` entity. The photo is read from
-`<config>/www/<image path>`, i.e. whatever you'd normally reference as
-`/local/<image path>` in Lovelace - so existing bin photos under
-/config/www/storage/ work without moving anything.
+`<config>/www/<image path>` - uploaded photos are stored under
+`/config/www/storage_bins/` by the config flow, but any relative path
+under `/config/www` works (e.g. if set via the `update_bin` service).
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_BINS, CONF_CONTENTS, CONF_IMAGE, CONF_NAME, DOMAIN
+from .const import CONF_BINS, CONF_DESCRIPTION, CONF_IMAGE, CONF_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,13 +41,13 @@ class StorageBinImage(ImageEntity):
         self._bin_id = bin_config["id"]
         self._name = bin_config.get(CONF_NAME, self._bin_id)
         self._image_path = bin_config.get(CONF_IMAGE, "")
-        self._contents = bin_config.get(CONF_CONTENTS, "")
+        self._description = bin_config.get(CONF_DESCRIPTION, "")
 
         self._attr_unique_id = f"{entry.entry_id}_{self._bin_id}"
         self._attr_name = self._name
         self._attr_extra_state_attributes = {
             "bin_id": self._bin_id,
-            "contents": self._contents,
+            "description": self._description,
         }
         self.content_type = mimetypes.guess_type(self._image_path)[0] or "image/jpeg"
         self._attr_image_last_updated = dt_util.utcnow()
