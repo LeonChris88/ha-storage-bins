@@ -16,15 +16,10 @@ import voluptuous as vol
 
 from homeassistant.components.file_upload import process_uploaded_file
 from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.helpers import config_validation as cv
-
-try:
-    # Added alongside async_register_static_paths (HA 2024.7+).
-    from homeassistant.components.http import StaticPathConfig
-except ImportError:
-    StaticPathConfig = None
 
 from .const import (
     ATTR_BIN_ID,
@@ -72,28 +67,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Serve the Lovelace card from this component and auto-add it as a resource.
-
-    Means the card just works after installing via HACS - no manual copy
-    into /config/www and no manual Resources entry.
-    """
+    """Serve and register the Storage Bins Lovelace card."""
     global _frontend_registered
+
     if _frontend_registered:
         return
-    _frontend_registered = True
 
     card_path = hass.config.path(
         "custom_components", DOMAIN, "www", "storage-bins-card.js"
     )
-    if StaticPathConfig is not None and hasattr(hass.http, "async_register_static_paths"):
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(CARD_URL, card_path, cache_headers=False)]
-        )
-    else:
-        # Older HA cores (pre-2024.7): synchronous, deprecated, but works.
-        hass.http.register_static_path(CARD_URL, card_path, cache_headers=False)
+
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                CARD_URL,
+                card_path,
+                cache_headers=False,
+            )
+        ]
+    )
 
     add_extra_js_url(hass, CARD_URL)
+
+    _frontend_registered = True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
