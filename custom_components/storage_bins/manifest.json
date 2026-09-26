@@ -1,0 +1,11 @@
+{
+  "domain": "storage_bins",
+  "name": "Storage Bins",
+  "codeowners": ["@leonchris88"],
+  "config_flow": true,
+  "documentation": "https://github.com/leonchris88/ha-storage-bins",
+  "issue_tracker": "https://github.com/leonchris88/ha-storage-bins/issues",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "0.1.0"
+}

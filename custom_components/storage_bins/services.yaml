@@ -1,0 +1,39 @@
+update_bin:
+  name: Update bin
+  description: >-
+    Update a bin's name, image, or contents label. Useful for automations,
+    e.g. a voice command "add flashlight to bin 3".
+  fields:
+    bin_id:
+      name: Bin ID
+      description: The internal id of the bin (see sensor.storage_bins_index attributes).
+      required: true
+      selector:
+        text:
+    name:
+      name: Name
+      required: false
+      selector:
+        text:
+    image:
+      name: Image path
+      description: Path relative to /config/www, e.g. storage/bin1.jpg
+      required: false
+      selector:
+        text:
+    contents:
+      name: Contents
+      required: false
+      selector:
+        text:
+          multiline: true
+
+search:
+  name: Search bins
+  description: Search all bins' name + contents text. Returns matching bins.
+  fields:
+    query:
+      name: Query
+      required: true
+      selector:
+        text:

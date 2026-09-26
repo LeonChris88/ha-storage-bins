@@ -1,0 +1,49 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Storage Bins",
+        "description": "This creates one Storage Bins integration entry. You'll manage individual bins afterwards via its Configure button."
+      }
+    },
+    "abort": {
+      "already_configured": "Storage Bins is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage storage bins",
+        "menu_options": {
+          "add_bin": "Add a bin",
+          "edit_bin": "Edit a bin",
+          "remove_bin": "Remove a bin",
+          "done": "Done"
+        }
+      },
+      "add_bin": {
+        "title": "Add a bin",
+        "data": {
+          "name": "Name",
+          "image": "Image path (relative to /config/www)",
+          "contents": "Contents"
+        }
+      },
+      "edit_bin": {
+        "title": "Edit a bin",
+        "data": {
+          "bin_id": "Bin",
+          "name": "Name",
+          "image": "Image path (relative to /config/www)",
+          "contents": "Contents"
+        }
+      },
+      "remove_bin": {
+        "title": "Remove a bin",
+        "data": {
+          "bin_id": "Bin"
+        }
+      }
+    }
+  }
+}
