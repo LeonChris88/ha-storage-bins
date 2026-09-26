@@ -47,7 +47,49 @@ Replaces a manual pattern of one `bubble-card` pop-up + one
    ```yaml
    type: custom:storage-bins-card
    title: Storage Bins
+   show_name: true          # optional, defaults to true
+   show_description: true   # optional, defaults to true
+   columns: 5                # optional, omit for auto-fill
    ```
+   All of these are also editable as real toggle switches / fields by
+   clicking Edit on the card itself — no YAML required.
+
+A private repo works fine for a custom repository — HACS just needs
+your Home Assistant instance's GitHub access (or a public repo) to
+pull releases; it doesn't need to be listed anywhere public.
+
+## Push this repo to GitHub
+
+From this folder:
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+gh repo create ha-storage-bins --private --source=. --remote=origin --push
+```
+(`gh` is the GitHub CLI; if you don't have it, create the repo on
+github.com first and instead run
+`git remote add origin git@github.com:<you>/ha-storage-bins.git && git push -u origin main`.)
+
+HACS custom repositories work off tagged releases, not just the
+default branch, so tag one:
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+and create a GitHub Release from that tag (Releases → Draft a new
+release) — HACS shows the latest release as the installable version.
+Bump `version` in `manifest.json` and re-tag whenever you make changes.
+
+## Migrating your existing 15 bins
+
+You don't need to touch your current `bins.yaml` view right away — the
+integration and the old dashboard can run side by side. Add each bin
+through **Configure → Add Bin**, re-uploading (or re-pointing to) the
+same photo you already have. Once all 15 exist, swap the old
+`sections`/`bubble-card` view for the single `custom:storage-bins-card`
+block above and delete the old per-bin YAML. Your navbar routing is
+untouched either way — nothing here manages that.
 
 ## Notes / things to sanity-check before relying on this
 

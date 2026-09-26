@@ -1,23 +1,41 @@
 // storage-bins-card.js
 // A Lovelace card that replaces hand-written per-bin YAML: it finds every
 // image.* entity created by the Storage Bins integration, lays them out
-// as a numbered grid, and opens a popup with the photo + an editable
-// description field (saved via storage_bins.update_bin) on tap.
+// as a grid, and opens a popup with the photo + an editable description
+// field (saved via storage_bins.update_bin) on tap.
 //
-// Install: copy to /config/www/storage-bins-card.js, add as a Lovelace
-// resource (Settings > Dashboards > Resources > + Add Resource, URL
-// /local/storage-bins-card.js, type: JavaScript Module), then add a card:
+// Config options (all optional, settable via the card's own visual
+// editor - click Edit on the card - or by hand in YAML):
 //   type: custom:storage-bins-card
-//   title: Storage Bins   # optional
+//   title: Storage Bins        # card header
+//   show_name: true            # show each bin's name under its icon
+//   show_description: true     # show each bin's description under its name
+//   columns: 5                 # fixed column count; omit for auto-fill
+
+const DEFAULT_CONFIG = {
+  show_name: true,
+  show_description: true,
+};
 
 class StorageBinsCard extends HTMLElement {
   setConfig(config) {
-    this._config = config || {};
+    this._config = { ...DEFAULT_CONFIG, ...(config || {}) };
+    // A config change (e.g. from the editor) should redraw immediately
+    // rather than waiting for the next hass state tick.
+    if (this._hass) this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
     this._render();
+  }
+
+  static getStubConfig() {
+    return { ...DEFAULT_CONFIG, title: "Storage Bins" };
+  }
+
+  static getConfigElement() {
+    return document.createElement("storage-bins-card-editor");
   }
 
   _bins() {
@@ -85,18 +103,25 @@ class StorageBinsCard extends HTMLElement {
   }
 
   _render() {
-    if (!this._hass) return;
+    if (!this._hass || !this._config) return;
     const bins = this._bins();
+    const showName = this._config.show_name !== false;
+    const showDescription = this._config.show_description !== false;
+    const columns = parseInt(this._config.columns, 10);
 
     if (!this._card) {
       this._card = document.createElement("ha-card");
-      if (this._config.title) this._card.header = this._config.title;
       this._grid = document.createElement("div");
-      this._grid.style.cssText =
-        "display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;padding:16px;";
+      this._grid.style.padding = "16px";
+      this._grid.style.display = "grid";
+      this._grid.style.gap = "8px";
       this._card.appendChild(this._grid);
       this.appendChild(this._card);
     }
+
+    this._card.header = this._config.title || undefined;
+    this._grid.style.gridTemplateColumns =
+      columns > 0 ? `repeat(${columns}, 1fr)` : "repeat(auto-fill,minmax(64px,1fr))";
 
     this._grid.innerHTML = "";
     if (bins.length === 0) {
@@ -118,12 +143,23 @@ class StorageBinsCard extends HTMLElement {
       const icon = document.createElement("ha-icon");
       icon.icon = "mdi:archive";
       icon.style.cssText = "--mdc-icon-size:32px;color:var(--secondary-text-color,#999);";
+      btn.appendChild(icon);
 
-      const label = document.createElement("div");
-      label.textContent = st.attributes.friendly_name || st.entity_id;
-      label.style.cssText = "font-size:0.8em;margin-top:4px;text-align:center;";
+      if (showName) {
+        const label = document.createElement("div");
+        label.textContent = st.attributes.friendly_name || st.entity_id;
+        label.style.cssText = "font-size:0.8em;margin-top:4px;text-align:center;";
+        btn.appendChild(label);
+      }
 
-      btn.append(icon, label);
+      if (showDescription && st.attributes.description) {
+        const desc = document.createElement("div");
+        desc.textContent = st.attributes.description;
+        desc.style.cssText =
+          "font-size:0.7em;opacity:0.7;margin-top:2px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;";
+        btn.appendChild(desc);
+      }
+
       btn.onclick = () => this._openBin(st);
       this._grid.appendChild(btn);
     });
@@ -142,3 +178,76 @@ window.customCards.push({
   name: "Storage Bins Card",
   description: "Auto-generated grid + popups for the Storage Bins integration.",
 });
+
+// ---------------------------------------------------------------------
+// Visual editor: real toggle switches for show_name / show_description,
+// a number field for columns, and a text field for the title. Uses HA's
+// own <ha-switch>/<ha-formfield>/<ha-textfield> elements, which are
+// already globally registered by the frontend - no extra dependency.
+// ---------------------------------------------------------------------
+class StorageBinsCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = { ...DEFAULT_CONFIG, ...(config || {}) };
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+  }
+
+  _render() {
+    if (!this._config) return;
+
+    this.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:16px;padding:16px 0;">
+        <ha-textfield id="title" label="Title" value="${this._escape(this._config.title || "")}"></ha-textfield>
+        <ha-formfield label="Show name">
+          <ha-switch id="show_name" ${this._config.show_name !== false ? "checked" : ""}></ha-switch>
+        </ha-formfield>
+        <ha-formfield label="Show description">
+          <ha-switch id="show_description" ${this._config.show_description !== false ? "checked" : ""}></ha-switch>
+        </ha-formfield>
+        <ha-textfield
+          id="columns"
+          label="Columns (blank = auto)"
+          type="number"
+          min="1"
+          value="${this._config.columns ?? ""}"
+        ></ha-textfield>
+      </div>
+    `;
+
+    this.querySelector("#title").addEventListener("change", (e) =>
+      this._update({ title: e.target.value || undefined })
+    );
+    this.querySelector("#show_name").addEventListener("change", (e) =>
+      this._update({ show_name: e.target.checked })
+    );
+    this.querySelector("#show_description").addEventListener("change", (e) =>
+      this._update({ show_description: e.target.checked })
+    );
+    this.querySelector("#columns").addEventListener("change", (e) => {
+      const value = e.target.value ? parseInt(e.target.value, 10) : undefined;
+      this._update({ columns: value });
+    });
+  }
+
+  _escape(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  _update(patch) {
+    this._config = { ...this._config, ...patch };
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+}
+
+customElements.define("storage-bins-card-editor", StorageBinsCardEditor);

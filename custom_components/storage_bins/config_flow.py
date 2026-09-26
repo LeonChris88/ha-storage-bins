@@ -90,7 +90,9 @@ class StorageBinsOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._entry = config_entry
-        self._bins: list[dict] = list(config_entry.options.get(CONF_BINS, []))
+        # Independent copies - see the comment on _get_bins() in __init__.py
+        # for why mutating shared dict references breaks change detection.
+        self._bins: list[dict] = [dict(b) for b in config_entry.options.get(CONF_BINS, [])]
         self._selected_id: str | None = None
 
     @callback
@@ -102,6 +104,16 @@ class StorageBinsOptionsFlow(config_entries.OptionsFlow):
 
     def _selected_bin(self) -> dict:
         return next(b for b in self._bins if b["id"] == self._selected_id)
+
+    def _async_save(self) -> None:
+        """Persist self._bins to the config entry immediately.
+
+        Called after every add/edit/delete so nothing is lost if the
+        dialog gets closed instead of reaching the final "Done" step.
+        """
+        self.hass.config_entries.async_update_entry(
+            self._entry, options={**self._entry.options, CONF_BINS: self._bins}
+        )
 
     # -- top menu -----------------------------------------------------
 
@@ -134,6 +146,7 @@ class StorageBinsOptionsFlow(config_entries.OptionsFlow):
                         CONF_IMAGE: image_path,
                     }
                 )
+                self._async_save()
                 return await self.async_step_init()
 
         return self.async_show_form(
@@ -170,6 +183,7 @@ class StorageBinsOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             current[CONF_NAME] = user_input[CONF_NAME]
             current[CONF_DESCRIPTION] = user_input.get(CONF_DESCRIPTION, "")
+            self._async_save()
             return await self.async_step_init()
 
         return self.async_show_form(
@@ -187,6 +201,7 @@ class StorageBinsOptionsFlow(config_entries.OptionsFlow):
             except Exception:  # noqa: BLE001
                 errors["base"] = "image_upload_failed"
             else:
+                self._async_save()
                 return await self.async_step_init()
 
         schema = vol.Schema({vol.Required(CONF_IMAGE): IMAGE_SELECTOR})
@@ -200,6 +215,7 @@ class StorageBinsOptionsFlow(config_entries.OptionsFlow):
             if user_input.get("confirm"):
                 await async_delete_bin_images(self.hass, current["id"])
                 self._bins = [b for b in self._bins if b["id"] != current["id"]]
+                self._async_save()
             return await self.async_step_init()
 
         schema = vol.Schema({vol.Required("confirm", default=False): bool})
