@@ -110,7 +110,16 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 def _get_bins(entry: ConfigEntry) -> list[dict]:
-    return list(entry.options.get(CONF_BINS, entry.data.get(CONF_BINS, [])))
+    """Return independent copies of the bin dicts.
+
+    Copies matter here: several call sites mutate a bin's fields in
+    place before saving. If those dicts were the same objects already
+    referenced by entry.options, HA's "did anything actually change?"
+    comparison in async_update_entry would see identical before/after
+    values (since the "before" got silently mutated too) and skip both
+    the save and the entity reload - edits would appear to do nothing.
+    """
+    return [dict(b) for b in entry.options.get(CONF_BINS, entry.data.get(CONF_BINS, []))]
 
 
 # ---------------------------------------------------------------------------
